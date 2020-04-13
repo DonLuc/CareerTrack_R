@@ -81,4 +81,3 @@ cleaned_tweet_words %>%
        subtitle = "Stop words removed from the list")
 
 
-
