@@ -17,6 +17,22 @@ library("igraph")
 #install.packages("ggraph")
 library("ggraph")
 
+library(reactable) 
+
+
+make_url_html <- function(url) {
+  if(length(url) < 2) {
+    if(!is.na(url)) {
+      as.character(glue("<a title = {url} target = '_new' href = '{url}'>{url}</a>") )
+    } else {
+      ""
+    }
+  } else {
+    paste0(purrr::map_chr(url, ~ paste0("<a title = '", .x, "' target = '_new' href = '", .x, "'>", .x, "</a>", collapse = ", ")), collapse = ", ")
+  }
+}
+
+
 title <- "CareerTrack"
 twitter_handle <- "Twitter Handle"
 about <- "Use your Twitter account to determine your possible career paths based on what you normally tweet about."
@@ -34,16 +50,17 @@ ui <- fluidPage(
       selectInput("includeRTs", h4("Include retweets?"), 
                   choices = list("Yes" = 1, "No" = 2)
       ),
-      actionButton("process", "Process")
+      actionButton("process", "Process", class = "btn-primary btn-block")
     ),
     mainPanel(
       fluidRow(
         column(6,
                # h4(textOutput("processed")),    
                # dataTableOutput("processed")
-               
+               h4("User Profile"),
                fluidRow(
                   column(4,
+                         
                         uiOutput("profile_image")         
                   ),
                   column(8,
@@ -68,7 +85,7 @@ ui <- fluidPage(
                   ),
                   fluidRow(
                     column(6, 
-                      uiOutput("recent_tweets")       
+                           #reactableOutput("recent_tweets")       
                     )
                     
                   )
@@ -79,8 +96,10 @@ ui <- fluidPage(
                
         ),
         column(6,
+               h4("Recent tweets"),
                # textOutput("include")
                #uiOutput("profile_image")
+               reactableOutput("recent_tweets")
         )
       )
       
@@ -92,14 +111,45 @@ ui <- fluidPage(
 server <- function(input, output){
   observeEvent(input$process, {
     user <- search_users(input$twitterHandle, n = 1)
-    tweets <- search_tweets("drone OR technology or finance", n = 20, include_rts = TRUE)
+    
+    tweet_df <- reactive({
+      search_tweets(input$twitterHandle, n = 10, include_rts = FALSE)
+    })
+    
+    
+    
+    tweet_table_data <- reactive({
+      req(tweet_df())
+      tweet_df() %>%
+        select(user_id, status_id, created_at, screen_name, text, favorite_count, retweet_count, urls_expanded_url) %>%
+        mutate(
+          Tweet = glue::glue("{text} <a href='https://twitter.com/{screen_name}/status/{status_id}'>>> </a>"),
+          URLs = purrr::map_chr(urls_expanded_url, make_url_html)
+        )%>%
+        select(DateTime = created_at, User = screen_name, Tweet, Likes = favorite_count, RTs = retweet_count, URLs)
+    })
+    
+    output$recent_tweets <- renderReactable({
+      reactable::reactable(tweet_table_data(), 
+                           filterable = TRUE, searchable = TRUE, bordered = TRUE, striped = TRUE, highlight = TRUE,
+                           showSortable = TRUE, defaultSortOrder = "desc", defaultPageSize = 25, showPageSizeOptions = TRUE, pageSizeOptions = c(25, 50, 75, 100, 200), 
+                           height = 400,
+                           columns = list(
+                             DateTime = colDef(defaultSortOrder = "asc"),
+                             User = colDef(defaultSortOrder = "asc"),
+                             Tweet = colDef(html = TRUE, minWidth = 190, resizable = TRUE),
+                             Likes = colDef(filterable = FALSE, format = colFormat(separators = TRUE)),
+                             RTs = colDef(filterable =  FALSE, format = colFormat(separators = TRUE)),
+                             URLs = colDef(html = TRUE)
+                           )
+      )
+    })
+    
     output$processed <- renderDataTable({
       # paste("Twitter handle", input$twitterHandle)
       #search_users("@bacee2", n = 1)
     })
-    output$recent_tweets <- renderUI({
-      tweets
-    })
+    
     output$include <- renderText({
       paste('Include Retweets? ', input$includeRTs)
     })
