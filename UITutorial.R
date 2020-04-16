@@ -100,6 +100,7 @@ ui <- fluidPage(
                # textOutput("include")
                #uiOutput("profile_image")
                reactableOutput("recent_tweets")
+               #textOutput("testing")
         )
       )
       
@@ -109,70 +110,62 @@ ui <- fluidPage(
   
 )
 server <- function(input, output){
-  observeEvent(input$process, {
-    user <- search_users(input$twitterHandle, n = 1)
-    
-    tweet_df <- reactive({
-      search_tweets(input$twitterHandle, n = 10, include_rts = FALSE)
-    })
-    
-    
-    
-    tweet_table_data <- reactive({
-      req(tweet_df())
-      tweet_df() %>%
-        select(user_id, status_id, created_at, screen_name, text, favorite_count, retweet_count, urls_expanded_url) %>%
-        mutate(
-          Tweet = glue::glue("{text} <a href='https://twitter.com/{screen_name}/status/{status_id}'>>> </a>"),
-          URLs = purrr::map_chr(urls_expanded_url, make_url_html)
-        )%>%
-        select(DateTime = created_at, User = screen_name, Tweet, Likes = favorite_count, RTs = retweet_count, URLs)
-    })
-    
-    output$recent_tweets <- renderReactable({
-      reactable::reactable(tweet_table_data(), 
-                           filterable = TRUE, searchable = TRUE, bordered = TRUE, striped = TRUE, highlight = TRUE,
-                           showSortable = TRUE, defaultSortOrder = "desc", defaultPageSize = 25, showPageSizeOptions = TRUE, pageSizeOptions = c(25, 50, 75, 100, 200), 
-                           height = 400,
-                           columns = list(
-                             DateTime = colDef(defaultSortOrder = "asc"),
-                             User = colDef(defaultSortOrder = "asc"),
-                             Tweet = colDef(html = TRUE, minWidth = 190, resizable = TRUE),
-                             Likes = colDef(filterable = FALSE, format = colFormat(separators = TRUE)),
-                             RTs = colDef(filterable =  FALSE, format = colFormat(separators = TRUE)),
-                             URLs = colDef(html = TRUE)
-                           )
-      )
-    })
-    
-    output$processed <- renderDataTable({
-      # paste("Twitter handle", input$twitterHandle)
-      #search_users("@bacee2", n = 1)
-    })
-    
-    output$include <- renderText({
-      paste('Include Retweets? ', input$includeRTs)
-    })
-    output$profile_image <- renderUI({
-      tags$img(src = user$profile_image_url, height = 100, width = 100)
-    })
-    output$name <- renderText({
-      paste("Name", user$name) 
-    })
-    output$location <- renderText({
-      paste("Location", user$location) 
-    })
-    output$followers <- renderText({
-      paste("Followers: ", user$followers_count)
-    })
-    output$following <- renderText({
-      paste("Following: ", user$friends_count)
-    })
-    output$description <- renderText({
-      paste("About: ", user$description)
-    })
-    
+  user = eventReactive(input$process, {
+    search_users(input$twitterHandle, n = 1)
   })
+  
+  tweets_df = eventReactive(input$process, {
+    search_tweets(input$twitterHandle, n = 10, include_rts = FALSE)
+  })
+  
+  tweets_table_data = eventReactive(input$process, {
+    req(tweets_df())
+    tweets_df() %>%
+      select(user_id, status_id, created_at, screen_name, text, favorite_count, retweet_count, urls_expanded_url) %>%
+      mutate(
+        Tweet = glue::glue("{text} <a href='https://twitter.com/{screen_name}/status/{status_id}'>>> </a>"),
+        URLs = purrr::map_chr(urls_expanded_url, make_url_html)
+      )%>%
+      select(DateTime = created_at, User = screen_name, Tweet, Likes = favorite_count, RTs = retweet_count, URLs)
+  })
+  
+  output$profile_image <- renderUI({
+    tags$img(src = user()$profile_image_url, height = 100, width = 100)
+  })
+  
+  output$name <- renderText({
+    paste("Name", user()$name) 
+  })
+  output$location <- renderText({
+    paste("Location", user()$location) 
+  })
+  output$followers <- renderText({
+    paste("Followers: ", user()$followers_count)
+  })
+  output$following <- renderText({
+    paste("Following: ", user()$friends_count)
+  })
+  output$description <- renderText({
+    paste("About: ", user()$description)
+  })
+  
+  output$recent_tweets <- renderReactable({
+    reactable::reactable(tweets_table_data(), 
+                         filterable = TRUE, searchable = TRUE, bordered = TRUE, striped = TRUE, highlight = TRUE,
+                         showSortable = TRUE, defaultSortOrder = "desc", defaultPageSize = 25, showPageSizeOptions = TRUE, pageSizeOptions = c(25, 50, 75, 100, 200), 
+                         height = 400,
+                         columns = list(
+                           DateTime = colDef(defaultSortOrder = "asc"),
+                           User = colDef(defaultSortOrder = "asc"),
+                           Tweet = colDef(html = TRUE, minWidth = 190, resizable = TRUE),
+                           Likes = colDef(filterable = FALSE, format = colFormat(separators = TRUE)),
+                           RTs = colDef(filterable =  FALSE, format = colFormat(separators = TRUE)),
+                           URLs = colDef(html = TRUE)
+                         )
+    )
+  })
+  
+  
   
 }
 shinyApp(ui = ui, server = server)
